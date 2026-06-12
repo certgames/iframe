@@ -1,0 +1,8 @@
+return {
+	{"Basic", 2, Color3.fromRGB(255, 255, 255)},
+	{"Common", 5, Color3.fromRGB(182, 182, 182)},
+	{"Uncommon", 7, Color3.fromRGB(34, 255, 0)},
+	{"Rare", 10, Color3.fromRGB(31, 23, 255)},
+	{"Epic", 15, Color3.fromRGB(194, 19, 195)},
+	{"Legendary", 20, Color3.fromRGB(249, 234, 0)},
+} 
