@@ -1,0 +1,116 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local iframeList = require(modules:WaitForChild("iFrameList"))
+local selectRarity = require(modules:WaitForChild("SelectRarity"))
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local rollingRem = remotes:WaitForChild("Rolling")
+
+local mainFrame = script.Parent:WaitForChild("MainFrame")
+
+local holder = mainFrame:WaitForChild("Holder")
+local rollBtn = holder:WaitForChild("RollButton")
+
+local rollingBg = mainFrame:WaitForChild("RollingBackground")
+local rollTitle = rollingBg:WaitForChild("Title")
+local rollRarity = rollTitle:WaitForChild("Rarity")
+
+local numRolls = 10
+local rollDebounce = false
+
+local acceptConnection, declineConnection
+
+local function turnOffUI(uiInfo: TweenInfo)
+	TweenService:Create(rollingBg, uiInfo, {["BackgroundTransparency"] = 1}):Play()
+	TweenService:Create(rollTitle, uiInfo, {["TextTransparency"] = 1}):Play()
+	TweenService:Create(rollRarity, uiInfo, {["TextTransparency"] = 1}):Play()
+
+	remotes.ToggleUIEffect:Fire(false)
+	
+	TweenService:Create(rollTitle.DeclineBtn, uiInfo, {["BackgroundTransparency"]=1}):Play()
+	TweenService:Create(rollTitle.DeclineBtn.Title, uiInfo, {["TextTransparency"]=1}):Play()
+	TweenService:Create(rollTitle.AcceptBtn, uiInfo, {["BackgroundTransparency"]=1}):Play()
+	TweenService:Create(rollTitle.AcceptBtn.Title, uiInfo, {["TextTransparency"]=1}):Play()
+end
+
+rollBtn.Activated:Connect(function()
+	if rollDebounce then return end
+	rollDebounce = true
+	
+	if acceptConnection then acceptConnection:Disconnect() end
+	if declineConnection then declineConnection:Disconnect() end
+	
+	rollTitle.AcceptBtn.Visible = false
+	rollTitle.DeclineBtn.Visible = false
+	
+	rollingRem:WaitForChild("UpdateRolls"):FireServer(1)
+	
+	local rollTime = .25
+	local rollInfo = TweenInfo.new(rollTime, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+	local rollTable = {}
+	
+	for i = 1, numRolls, 1 do
+		table.insert(rollTable, selectRarity.getRandomIndex(iframeList))
+	end
+	
+	rollingBg.Visible = false
+	remotes.ToggleUIEffect:Fire(true)
+	
+	for i, chance in ipairs(rollTable) do
+		local iframeName = chance[1]
+		local iframeRarity = chance[2]
+		local iframeColor = chance[3]
+		
+		rollTitle.Position = UDim2.fromScale(.5, .35)
+		rollTitle.TextTransparency = 1
+		rollRarity.TextTransparency = 1
+		
+		rollingBg.Visible = true
+
+		rollTitle.Text = iframeName
+		rollTitle.TextColor3 = iframeColor
+		rollRarity.Text = "1 in " ..iframeRarity
+
+		TweenService:Create(rollTitle, rollInfo, {["Position"] = UDim2.fromScale(.5, .47), ["TextTransparency"]=0}):Play()
+		TweenService:Create(rollRarity, rollInfo, {["TextTransparency"]=0}):Play()
+		
+		rollTime *= 1.17
+		task.wait(rollTime / 5)
+	end
+	
+	local uiInfo = TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+	
+	rollTitle.AcceptBtn.BackgroundTransparency = 1
+	rollTitle.AcceptBtn.Title.TextTransparency = 1
+	rollTitle.DeclineBtn.BackgroundTransparency = 1
+	rollTitle.DeclineBtn.Title.TextTransparency = 1
+	rollTitle.AcceptBtn.Visible = true
+	rollTitle.DeclineBtn.Visible = true
+	TweenService:Create(rollTitle.DeclineBtn, uiInfo, {["BackgroundTransparency"]=0}):Play()
+	TweenService:Create(rollTitle.DeclineBtn.Title, uiInfo, {["TextTransparency"]=0}):Play()
+	TweenService:Create(rollTitle.AcceptBtn, uiInfo, {["BackgroundTransparency"]=0}):Play()
+	TweenService:Create(rollTitle.AcceptBtn.Title, uiInfo, {["TextTransparency"]=0}):Play()
+	
+	acceptConnection = rollTitle.AcceptBtn.Activated:Connect(function()
+		rollingRem:WaitForChild("AddiFrame"):FireServer(rollTable[numRolls])
+		
+		turnOffUI(uiInfo)
+		
+		task.wait(rollTime)
+		rollDebounce = false
+		return
+	end)
+	
+	declineConnection = rollTitle.DeclineBtn.Activated:Connect(function()
+		turnOffUI(uiInfo)
+		
+		task.wait(rollTime)
+		rollDebounce = false
+		return
+	end)
+end)
