@@ -1,0 +1,101 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local effectsFolder = ReplicatedStorage:WaitForChild("Effects")
+
+local activeiFrameEffects = {}
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local rollingRem = remotes:WaitForChild("Rolling")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local function activateiFrame(plr, iframeName: string)
+	local character = plr.Character or plr.CharacterAdded:Wait()
+	local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+	local effectName = iframeName .. "iFrame"
+	local effectTemplate = effectsFolder:FindFirstChild(effectName)
+
+	if not effectTemplate then
+		warn("iFrame effect not found:", effectName)
+		return
+	end
+
+	-- Remove old active effect
+	if activeiFrameEffects[plr] then
+		activeiFrameEffects[plr]:Destroy()
+		activeiFrameEffects[plr] = nil
+	end
+
+	-- Clone and activate new effect
+	local newEffect = effectTemplate:Clone()
+	newEffect.Name = "ActiveiFrameEffect"
+	newEffect.Parent = humanoidRootPart
+
+	for _, object in ipairs(newEffect:GetDescendants()) do
+		if object:IsA("ParticleEmitter") or object:IsA("Beam") or object:IsA("Trail") then
+			object.Enabled = true
+		end
+	end
+
+	activeiFrameEffects[plr] = newEffect
+end
+
+rollingRem:WaitForChild("UpdateRolls").OnServerEvent:Connect(function(plr, newValue)
+	plr:WaitForChild("leaderstats"):WaitForChild("Rolls").Value += newValue
+end)
+
+rollingRem:WaitForChild("AddiFrame").OnServerEvent:Connect(function(plr, iframeTable)
+	local inventory = plr:WaitForChild("Inventory")
+	local ownediFrames = inventory:WaitForChild("OwnediFrames")
+	
+	for i, iframe in pairs(ownediFrames:GetChildren()) do
+		if iframe.Name == iframeTable[1] then
+			iframe.Value += 1
+			return
+		end
+	end
+	
+	local newiFrame = Instance.new("NumberValue")
+	newiFrame.Parent = ownediFrames
+	newiFrame.Name = iframeTable[1]
+	newiFrame.Value = 1
+end)
+
+rollingRem:WaitForChild("EquipiFrame").OnServerEvent:Connect(function(plr, iframe:string)
+	plr:WaitForChild("Inventory"):WaitForChild("EquippediFrame").Value = iframe
+end)
+
+rollingRem:WaitForChild("ActivateiFrame").OnServerEvent:Connect(function(plr, iframe:string)
+	rollingRem:WaitForChild("ActivateiFrame").OnServerEvent:Connect(function(plr, iframe: string)
+		activateiFrame(plr, iframe)
+	end)
+end)
+
+rollingRem:WaitForChild("DeleteiFrame").OnServerEvent:Connect(function(plr, iframeName: string)
+	print("Delete request from:", plr.Name)
+	print("Trying to delete iframe:", iframeName)
+
+	local inventory = plr:WaitForChild("Inventory")
+	local ownediFrames = inventory:WaitForChild("OwnediFrames")
+
+	local iframeValue = ownediFrames:FindFirstChild(iframeName)
+
+	if not iframeValue then
+		warn("Iframe was NOT found in OwnediFrames:", iframeName)
+		return
+	end
+
+	print("Before delete:", iframeValue.Name, iframeValue.Value)
+
+	if iframeValue.Value > 1 then
+		iframeValue.Value -= 1
+	else
+		iframeValue:Destroy()
+	end
+
+	if iframeValue.Parent then
+		print("After delete:", iframeValue.Name, iframeValue.Value)
+	else
+		print("Iframe destroyed:", iframeName)
+	end
+end)
+
