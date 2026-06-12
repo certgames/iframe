@@ -1,0 +1,58 @@
+local uis = game:GetService("UserInputService")
+local debris = game:GetService("Debris")
+
+local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+local hitAnimations = game.ReplicatedStorage:WaitForChild("hitAnimations")
+local combatEvent = game.ReplicatedStorage:WaitForChild("combatEvent")
+
+local hit1 = hitAnimations:WaitForChild("hit1")
+local hit1Anim = hum.Animator:LoadAnimation(hit1)
+
+local attackDB = false
+local antiSpam = false
+
+local function createHitbox()
+	local hb = Instance.new("Part")
+	hb.CanCollide = false
+	hb.Anchored = false
+	hb.Massless = true
+	hb.Transparency = 1
+	hb.Size = hrp.Size * 2
+	hb.CFrame = hrp.CFrame
+	hb.Parent = workspace
+
+	local wc = Instance.new("WeldConstraint")
+	wc.Part0 = hrp
+	wc.Part1 = hb
+	wc.Parent = hb
+
+	debris:AddItem(hb, 0.3)
+
+	hb.Touched:Connect(function(hit)
+		if antiSpam == false and hit:GetAttribute("Destroyable") == true then
+			antiSpam = true
+			combatEvent:FireServer(hit)
+		end
+	end)
+end
+
+uis.InputBegan:Connect(function(input, chatting)
+	if chatting then return end
+
+	if attackDB == false and input.UserInputType == Enum.UserInputType.MouseButton1 then
+		attackDB = true
+		antiSpam = false
+
+		hit1Anim:Play()
+		createHitbox()
+
+		task.wait(1)
+
+		attackDB = false
+		antiSpam = false
+	end
+end)
