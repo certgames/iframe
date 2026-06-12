@@ -39,6 +39,9 @@ local function turnOffUI(uiInfo: TweenInfo)
 end
 
 rollBtn.Activated:Connect(function()
+	if player:WaitForChild("leaderstats"):WaitForChild("Coins").Value >= 2 then
+		
+	
 	if rollDebounce then return end
 	rollDebounce = true
 	
@@ -49,6 +52,7 @@ rollBtn.Activated:Connect(function()
 	rollTitle.DeclineBtn.Visible = false
 	
 	rollingRem:WaitForChild("UpdateRolls"):FireServer(1)
+	rollingRem:WaitForChild("UpdateCoins"):FireServer(2)
 	
 	local rollTime = .25
 	local rollInfo = TweenInfo.new(rollTime, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
@@ -113,4 +117,6 @@ rollBtn.Activated:Connect(function()
 		rollDebounce = false
 		return
 	end)
+	else print("not enou")
+	end
 end)
