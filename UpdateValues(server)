@@ -68,10 +68,8 @@ rollingRem:WaitForChild("EquipiFrame").OnServerEvent:Connect(function(plr, ifram
 	plr:WaitForChild("Inventory"):WaitForChild("EquippediFrame").Value = iframe
 end)
 
-rollingRem:WaitForChild("ActivateiFrame").OnServerEvent:Connect(function(plr, iframe:string)
-	rollingRem:WaitForChild("ActivateiFrame").OnServerEvent:Connect(function(plr, iframe: string)
-		activateiFrame(plr, iframe)
-	end)
+rollingRem:WaitForChild("ActivateiFrame").OnServerEvent:Connect(function(plr, iframe: string)
+	activateiFrame(plr, iframe)
 end)
 
 rollingRem:WaitForChild("DeleteiFrame").OnServerEvent:Connect(function(plr, iframeName: string)
