@@ -1,169 +1,243 @@
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
 
-local dataStore = DataStoreService:GetDataStore("Test1")
-local ServerScriptService = game:GetService("ServerScriptService")
+local DATASTORE_NAME = "Test1"
+local AUTOSAVE_INTERVAL = 120
+local MAX_RETRIES = 5
 
+local dataStore = DataStoreService:GetDataStore(DATASTORE_NAME)
+
+local savingPlayers = {}
 
 local function waitForRequestBudget(requestType)
-	local currentBudget = DataStoreService:GetRequestBudgetForRequestType(requestType)
-	
-	while currentBudget < 1 do
-		currentBudget = DataStoreService:GetRequestBudgetForRequestType(requestType)
-		task.wait(5)
+	while DataStoreService:GetRequestBudgetForRequestType(requestType) < 1 do
+		task.wait(1)
 	end
+end
+
+local function getDefaultData()
+	return {
+		Rolls = 0,
+		Coins = 2,
+
+		Inventory = {
+			MaxInventory = 10,
+			OwnediFrames = {},
+			EquippediFrame = "",
+		}
+	}
 end
 
 local function setupLeaderstats(plr: Player)
-	local userID = plr.UserId
-	local key = "Player_"..userID
-	
 	local leaderstats = Instance.new("Folder")
-	leaderstats.Parent = plr
 	leaderstats.Name = "leaderstats"
-	
+	leaderstats.Parent = plr
+
 	local rolls = Instance.new("NumberValue")
-	rolls.Parent = leaderstats
 	rolls.Name = "Rolls"
 	rolls.Value = 0
-	
+	rolls.Parent = leaderstats
+
+	local coins = Instance.new("NumberValue")
+	coins.Name = "Coins"
+	coins.Value = 2
+	coins.Parent = leaderstats
+
 	local inventory = Instance.new("Folder")
-	inventory.Parent = plr
 	inventory.Name = "Inventory"
-	
+	inventory.Parent = plr
+
 	local maxInventory = Instance.new("NumberValue")
-	maxInventory.Parent = inventory
 	maxInventory.Name = "MaxInventory"
 	maxInventory.Value = 10
-	
+	maxInventory.Parent = inventory
+
 	local ownediFrames = Instance.new("Folder")
-	ownediFrames.Parent = inventory
 	ownediFrames.Name = "OwnediFrames"
-	
+	ownediFrames.Parent = inventory
+
 	local equippediFrame = Instance.new("StringValue")
-	equippediFrame.Parent = inventory
 	equippediFrame.Name = "EquippediFrame"
 	equippediFrame.Value = ""
-	
-	local success, returnValue
-	
-	repeat
-		waitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
-		success, returnValue = pcall(dataStore.GetAsync, dataStore, key)
-	until success or not Players:FindFirstChild(plr.Name)
-	
-	if success then
-		if returnValue == nil then
-			returnValue = {
-				Rolls = 0,
-				Inventory = {
-					MaxInventory = 10,
-					OwnediFrames = {},
-					EquippediFrame = "",
-				}
-			}
-		end
-		
-		print(returnValue)
-		
-		plr.leaderstats.Rolls.Value = if returnValue.Rolls ~= nil then returnValue.Rolls else 0
-		
-		plr.Inventory.MaxInventory.Value = if returnValue.MaxInventory ~= nil then returnValue.Inventory.MaxInventory else 10
-		
-		plr.Inventory.EquippediFrame.Value = if returnValue.Inventory.EquippediFrame ~= nil then returnValue.Inventory.EquippediFrame else ""
-		local equipped = plr.Inventory.EquippediFrame.Value
+	equippediFrame.Parent = inventory
 
-		if plr.Inventory.EquippediFrame.Value ~= "" then
-			print(plr.Name .. " has equipped iframe:", plr.Inventory.EquippediFrame.Value)
+	local key = "Player_" .. plr.UserId
+
+	local success = false
+	local data = nil
+
+	for attempt = 1, MAX_RETRIES do
+		waitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
+
+		success, data = pcall(function()
+			return dataStore:GetAsync(key)
+		end)
+
+		if success then
+			break
 		else
-			print(plr.Name .. " has no iframe equipped.")
+			warn("Load failed for " .. plr.Name .. ". Attempt " .. attempt .. "/" .. MAX_RETRIES)
+			task.wait(2)
 		end
-		
-		if returnValue.Inventory.OwnediFrames ~= nil then
-			for i, v in pairs(returnValue.Inventory.OwnediFrames) do
-				local newInst = Instance.new("NumberValue")
-				newInst.Parent = plr.Inventory.OwnediFrames
-				newInst.Name = i
-				newInst.Value = v
+	end
+
+	if not success then
+		plr:Kick("Your data failed to load. Please rejoin.")
+		return
+	end
+
+	if data == nil then
+		data = getDefaultData()
+	end
+
+	rolls.Value = data.Rolls or 0
+	coins.Value = data.Coins or 2
+
+	if data.Inventory then
+		maxInventory.Value = data.Inventory.MaxInventory or 10
+		equippediFrame.Value = data.Inventory.EquippediFrame or ""
+
+		if data.Inventory.OwnediFrames then
+			for iframeName, amount in pairs(data.Inventory.OwnediFrames) do
+				local ownedValue = Instance.new("NumberValue")
+				ownedValue.Name = iframeName
+				ownedValue.Value = amount
+				ownedValue.Parent = ownediFrames
 			end
 		end
-		
-		
-	else
-		plr:Kick("Your data didn't load properly. Try again later, if the issue still exists: try contacting Admins / Developers.")
 	end
+
+	print("Loaded data for " .. plr.Name)
+	print(data)
 end
 
+local function buildDataTable(plr: Player)
+	local leaderstats = plr:FindFirstChild("leaderstats")
+	local inventory = plr:FindFirstChild("Inventory")
 
-local function save(plr: Player)
-	local userID = plr.UserId
-	local key = "Player_"..userID
-	
-	local rolls = plr.leaderstats.Rolls.Value
-	local maxInventory = plr.Inventory.MaxInventory.Value
-	local equippediFrame = plr.Inventory.EquippediFrame.Value
-	
-	local ownediFramesTable = {}
-	for i, v in pairs(plr.Inventory.OwnediFrames:GetChildren()) do
-		ownediFramesTable[v.Name] = v.Value
+	if not leaderstats or not inventory then
+		return nil
 	end
-	
-	local dataTable = {
-		Rolls = rolls,
+
+	local rolls = leaderstats:FindFirstChild("Rolls")
+	local coins = leaderstats:FindFirstChild("Coins")
+
+	local maxInventory = inventory:FindFirstChild("MaxInventory")
+	local ownediFrames = inventory:FindFirstChild("OwnediFrames")
+	local equippediFrame = inventory:FindFirstChild("EquippediFrame")
+
+	if not rolls or not coins or not maxInventory or not ownediFrames or not equippediFrame then
+		return nil
+	end
+
+	local ownediFramesTable = {}
+
+	for _, iframeValue in ipairs(ownediFrames:GetChildren()) do
+		if iframeValue:IsA("NumberValue") then
+			ownediFramesTable[iframeValue.Name] = iframeValue.Value
+		end
+	end
+
+	return {
+		Rolls = rolls.Value,
+		Coins = coins.Value,
+
 		Inventory = {
-			MaxInventory = maxInventory,
+			MaxInventory = maxInventory.Value,
 			OwnediFrames = ownediFramesTable,
-			EquippediFrame = equippediFrame,
+			EquippediFrame = equippediFrame.Value,
 		}
 	}
-	
-	local success, returnValue
-	repeat
+end
+
+local function save(plr: Player)
+	if not plr then
+		return
+	end
+
+	if savingPlayers[plr.UserId] then
+		return
+	end
+
+	local dataTable = buildDataTable(plr)
+
+	if not dataTable then
+		warn("Could not build data table for " .. plr.Name)
+		return
+	end
+
+	savingPlayers[plr.UserId] = true
+
+	local key = "Player_" .. plr.UserId
+	local success = false
+	local err = nil
+
+	for attempt = 1, MAX_RETRIES do
 		waitForRequestBudget(Enum.DataStoreRequestType.UpdateAsync)
-		success, returnValue = pcall(dataStore.UpdateAsync, dataStore, key, function()
-			return dataTable
+
+		success, err = pcall(function()
+			dataStore:UpdateAsync(key, function(oldData)
+				oldData = oldData or getDefaultData()
+
+				oldData.Rolls = dataTable.Rolls
+				oldData.Coins = dataTable.Coins
+
+				oldData.Inventory = oldData.Inventory or {}
+				oldData.Inventory.MaxInventory = dataTable.Inventory.MaxInventory
+				oldData.Inventory.OwnediFrames = dataTable.Inventory.OwnediFrames
+				oldData.Inventory.EquippediFrame = dataTable.Inventory.EquippediFrame
+
+				return oldData
+			end)
 		end)
-	until success
-	
-	print(dataTable)
-end
 
-local function onShutdown()
-	if RunService:IsStudio() then
-		task.wait(2)
-	else
-		local finished = Instance.new("BindableEvent")
-		local allPlayers = Players:GetPlayers()
-		local leftPlayers = #allPlayers
-		
-		for _, player in ipairs(allPlayers) do
-			coroutine.wrap(function()
-				save(player)
-				leftPlayers -= 1
-				
-				if leftPlayers == 0 then
-					finished:Fire()
-				end
-			end)()
+		if success then
+			print("Saved data for " .. plr.Name)
+			print(dataTable)
+			break
+		else
+			warn("Save failed for " .. plr.Name .. ". Attempt " .. attempt .. "/" .. MAX_RETRIES)
+			warn(err)
+			task.wait(2)
 		end
-		
-		finished.Event:Wait()
+	end
+
+	savingPlayers[plr.UserId] = nil
+
+	if not success then
+		warn("Final save failed for " .. plr.Name)
 	end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
-	coroutine.wrap(setupLeaderstats)(player)
-end
+Players.PlayerAdded:Connect(function(player)
+	setupLeaderstats(player)
+end)
 
-Players.PlayerAdded:Connect(setupLeaderstats)
-Players.PlayerRemoving:Connect(save)
-game:BindToClose(onShutdown)
+Players.PlayerRemoving:Connect(function(player)
+	save(player)
+end)
 
-while true do
-	task.wait(600)
-	for _, player in ipairs(Players:GetPlayers()) do
-		coroutine.wrap(save)(player)
+game:BindToClose(function()
+	local players = Players:GetPlayers()
+
+	for _, player in ipairs(players) do
+		task.spawn(function()
+			save(player)
+		end)
 	end
-end
+
+	task.wait(5)
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(AUTOSAVE_INTERVAL)
+
+		for _, player in ipairs(Players:GetPlayers()) do
+			task.spawn(function()
+				save(player)
+			end)
+		end
+	end
+end)
