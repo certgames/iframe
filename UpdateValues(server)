@@ -43,6 +43,10 @@ rollingRem:WaitForChild("UpdateRolls").OnServerEvent:Connect(function(plr, newVa
 	plr:WaitForChild("leaderstats"):WaitForChild("Rolls").Value += newValue
 end)
 
+rollingRem:WaitForChild("UpdateCoins").OnServerEvent:Connect(function(plr, newValue)
+	plr:WaitForChild("leaderstats"):WaitForChild("Coins").Value -= newValue
+end)
+
 rollingRem:WaitForChild("AddiFrame").OnServerEvent:Connect(function(plr, iframeTable)
 	local inventory = plr:WaitForChild("Inventory")
 	local ownediFrames = inventory:WaitForChild("OwnediFrames")
