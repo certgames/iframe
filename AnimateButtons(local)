@@ -1,0 +1,10 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local UIAnimations = require(modules:WaitForChild("UIAnimations"))
+
+for i, ui in ipairs(script.Parent:GetDescendants()) do
+	if ui:IsA("GuiButton") then
+		UIAnimations.AnimateButton(ui)
+	end
+end
