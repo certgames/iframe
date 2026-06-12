@@ -1,0 +1,249 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
+
+local combatEvent = ReplicatedStorage:WaitForChild("combatEvent")
+local iFrameList = require(ReplicatedStorage.Modules:WaitForChild("iFrameList"))
+
+local PICKUP_DELAY = 2.5
+local WALL_RESPAWN_TIME = 5
+local FRAGMENT_LIFETIME = 15
+
+local function getFragmentAmountFromRarity(rarityName)
+	for _, rarityData in ipairs(iFrameList) do
+		local name = rarityData[1]
+		local fragmentAmount = rarityData[2]
+
+		if name == rarityName then
+			return fragmentAmount
+		end
+	end
+
+	return 2
+end
+
+local function getPlayerFragmentAmount(plr)
+	local inventory = plr:FindFirstChild("Inventory")
+	if not inventory then
+		return 2
+	end
+
+	local equippediFrame = inventory:FindFirstChild("EquippediFrame")
+	if not equippediFrame then
+		return 2
+	end
+
+	local equippedName = equippediFrame.Value
+
+	if equippedName == "" then
+		return 2
+	end
+
+	return getFragmentAmountFromRarity(equippedName)
+end
+
+local function makeFragmentCollectible(fragment, coinValue, pickupDelay)
+	fragment:SetAttribute("IsFragment", true)
+	fragment:SetAttribute("Collected", false)
+	fragment:SetAttribute("CoinValue", coinValue)
+	fragment:SetAttribute("CanCollect", false)
+
+	fragment.CanTouch = false
+
+	task.delay(pickupDelay or PICKUP_DELAY, function()
+		if fragment and fragment.Parent then
+			fragment:SetAttribute("CanCollect", true)
+			fragment.CanTouch = true
+		end
+	end)
+
+	fragment.Touched:Connect(function(hit)
+		if fragment:GetAttribute("CanCollect") ~= true then
+			return
+		end
+
+		if fragment:GetAttribute("Collected") == true then
+			return
+		end
+
+		local character = hit:FindFirstAncestorOfClass("Model")
+		if not character then
+			return
+		end
+
+		local touchingPlayer = Players:GetPlayerFromCharacter(character)
+		if not touchingPlayer then
+			return
+		end
+
+		local leaderstats = touchingPlayer:FindFirstChild("leaderstats")
+		if not leaderstats then
+			return
+		end
+
+		local coins = leaderstats:FindFirstChild("Coins")
+		if not coins then
+			return
+		end
+
+		fragment:SetAttribute("Collected", true)
+
+		coins.Value += fragment:GetAttribute("CoinValue") or 1
+
+		fragment.CanTouch = false
+		fragment.CanCollide = false
+		fragment.Transparency = 1
+
+		fragment:Destroy()
+	end)
+
+	Debris:AddItem(fragment, FRAGMENT_LIFETIME)
+end
+
+local function respawnWall(originalData)
+	task.delay(WALL_RESPAWN_TIME, function()
+		if not originalData.Parent then
+			return
+		end
+
+		local newWall = Instance.new("Part")
+
+		newWall.Name = originalData.Name
+		newWall.Size = originalData.Size
+		newWall.CFrame = originalData.CFrame
+		newWall.Color = originalData.Color
+		newWall.Material = originalData.Material
+		newWall.Transparency = originalData.Transparency
+		newWall.Reflectance = originalData.Reflectance
+		newWall.Anchored = originalData.Anchored
+		newWall.CanCollide = originalData.CanCollide
+		newWall.CanTouch = originalData.CanTouch
+		newWall.CanQuery = originalData.CanQuery
+		newWall.CastShadow = originalData.CastShadow
+		newWall.Parent = originalData.Parent
+
+		for attributeName, attributeValue in pairs(originalData.Attributes) do
+			newWall:SetAttribute(attributeName, attributeValue)
+		end
+
+		newWall:SetAttribute("Destroyable", true)
+		newWall:SetAttribute("Destroying", false)
+	end)
+end
+
+local function createWallFragments(plr, wallHit, fragmentAmount)
+	local character = plr.Character
+	if not character then
+		return
+	end
+
+	local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+	if not humanoidRootPart then
+		return
+	end
+
+	local originalCFrame = wallHit.CFrame
+	local originalSize = wallHit.Size
+	local originalColor = wallHit.Color
+	local originalMaterial = wallHit.Material
+	local originalTransparency = wallHit.Transparency
+	local originalReflectance = wallHit.Reflectance
+
+	local columns = math.ceil(math.sqrt(fragmentAmount))
+	local rows = math.ceil(fragmentAmount / columns)
+
+	local fragmentSize = Vector3.new(
+		originalSize.X / columns,
+		originalSize.Y / rows,
+		originalSize.Z
+	)
+
+	local pushDirection = humanoidRootPart.CFrame.LookVector
+	local fragmentsCreated = 0
+
+	for row = 1, rows do
+		for column = 1, columns do
+			if fragmentsCreated >= fragmentAmount then
+				return
+			end
+
+			fragmentsCreated += 1
+
+			local xOffset = -originalSize.X / 2 + fragmentSize.X / 2 + (column - 1) * fragmentSize.X
+			local yOffset = originalSize.Y / 2 - fragmentSize.Y / 2 - (row - 1) * fragmentSize.Y
+
+			local fragment = Instance.new("Part")
+			fragment.Name = "CoinFragment"
+			fragment.Size = fragmentSize
+			fragment.CFrame = originalCFrame * CFrame.new(xOffset, yOffset, 0)
+			fragment.Color = originalColor
+			fragment.Material = originalMaterial
+			fragment.Transparency = originalTransparency
+			fragment.Reflectance = originalReflectance
+			fragment.Anchored = false
+			fragment.CanCollide = true
+			fragment.CanTouch = false
+			fragment.CanQuery = true
+			fragment.Parent = workspace
+
+			makeFragmentCollectible(fragment, 1, PICKUP_DELAY)
+
+			local randomForce = Vector3.new(
+				math.random(-8, 8),
+				math.random(4, 12),
+				math.random(-8, 8)
+			)
+
+			fragment.AssemblyLinearVelocity = pushDirection * 20 + randomForce
+		end
+	end
+end
+
+combatEvent.OnServerEvent:Connect(function(plr, wallHit)
+	if not plr then
+		return
+	end
+
+	if not wallHit then
+		return
+	end
+
+	if not wallHit:IsA("Part") then
+		return
+	end
+
+	if wallHit:GetAttribute("Destroyable") ~= true then
+		return
+	end
+
+	if wallHit:GetAttribute("Destroying") == true then
+		return
+	end
+
+	wallHit:SetAttribute("Destroying", true)
+
+	local originalData = {
+		Name = wallHit.Name,
+		Size = wallHit.Size,
+		CFrame = wallHit.CFrame,
+		Color = wallHit.Color,
+		Material = wallHit.Material,
+		Transparency = wallHit.Transparency,
+		Reflectance = wallHit.Reflectance,
+		Anchored = wallHit.Anchored,
+		CanCollide = wallHit.CanCollide,
+		CanTouch = wallHit.CanTouch,
+		CanQuery = wallHit.CanQuery,
+		CastShadow = wallHit.CastShadow,
+		Parent = wallHit.Parent,
+		Attributes = wallHit:GetAttributes(),
+	}
+
+	local fragmentAmount = getPlayerFragmentAmount(plr)
+
+	createWallFragments(plr, wallHit, fragmentAmount)
+
+	respawnWall(originalData)
+
+	wallHit:Destroy()
+end)
