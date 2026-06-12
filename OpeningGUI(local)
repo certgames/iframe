@@ -1,0 +1,126 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local plr = Players.LocalPlayer
+
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local iframeList = require(modules:WaitForChild("iFrameList"))
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+local openTime = .5
+local openInfo = TweenInfo.new(openTime, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+local screenGui = script.Parent
+local holder = screenGui:WaitForChild("Holder")
+
+local openedGui = nil
+local prevGui = nil
+
+local guiDebounce = false
+
+local showcaser = screenGui:WaitForChild("_Inventory"):WaitForChild("Showcaser")
+local selection = screenGui:WaitForChild("_Inventory"):WaitForChild("Selection")
+local options = screenGui:WaitForChild("_Inventory"):WaitForChild("Options")
+
+remotes:WaitForChild("ToggleUIEffect").Event:Connect(function(bool)
+	local blur = Lighting:WaitForChild("UI_Blur")
+	local cc = Lighting:WaitForChild("UI_CC")
+	local camera = workspace.CurrentCamera
+	
+	local effectInfo = TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+	
+	if bool == true then
+		TweenService:Create(blur, effectInfo, {["Size"] = 12}):Play()
+		TweenService:Create(cc, effectInfo, {["Brightness"] = .25}):Play()
+		TweenService:Create(camera, effectInfo, {["FieldOfView"] = 60}):Play()
+	else
+		TweenService:Create(blur, effectInfo, {["Size"] = 0}):Play()
+		TweenService:Create(cc, effectInfo, {["Brightness"] = 0}):Play()
+		TweenService:Create(camera, effectInfo, {["FieldOfView"] = 80}):Play()
+	end
+end)
+
+local function openGUI(uiName: string)
+	for i, ui in pairs(screenGui:GetChildren()) do
+		if ui:IsA("Frame") then
+			if ui.Name == "_" .. uiName then
+				if guiDebounce then return end
+				guiDebounce = true
+				
+				openedGui = ui
+				
+				if prevGui == openedGui then
+					TweenService:Create(openedGui, openInfo, {["Position"] = UDim2.fromScale(.5, .45)}):Play()
+					TweenService:Create(prevGui, openInfo, {["Position"] = UDim2.fromScale(.5, .45)}):Play()
+					
+					openedGui.Visible = false
+					prevGui.Visible = false
+					
+					remotes.ToggleUIEffect:Fire(false)
+					
+					openedGui = nil
+					prevGui = nil
+				else
+ 					openedGui.Position = UDim2.fromScale(.5, .45)
+					openedGui.Visible = true
+					
+					remotes.ToggleUIEffect:Fire(true)
+					
+					TweenService:Create(openedGui, openInfo, {["Position"] = UDim2.fromScale(.5, .5)}):Play()
+					
+					if prevGui ~= nil then
+						TweenService:Create(prevGui, openInfo, {["Position"] = UDim2.fromScale(.5, .45)}):Play()
+						prevGui.Visible = false
+					end
+				end
+				
+				if openedGui ~= nil then
+					remotes:WaitForChild("SwitchedUI"):Fire(openedGui.Name)
+				else
+					remotes:WaitForChild("SwitchedUI"):Fire("nil")
+				end
+				
+				task.wait(openTime)
+				prevGui = openedGui
+				guiDebounce = false
+				
+				print("inventory opened")
+				if plr.Inventory.EquippediFrame.Value ~= "" then
+					selection.Visible = false
+					showcaser.Visible = true
+					options.Visible = true
+
+					local equippedIframe = plr.Inventory.EquippediFrame.Value
+
+					local iframeInfo = nil
+
+					for _, iframeTable in ipairs(iframeList) do
+						if iframeTable[1] == equippedIframe then
+							iframeInfo = iframeTable
+							break
+						end
+					end
+
+					if iframeInfo then
+						showcaser.iFrameName.Text = iframeInfo[1]
+						showcaser.iFrameName.TextColor3 = iframeInfo[3]
+						showcaser.iFrameRarity.Text = string.format("1 in %d", iframeInfo[2])
+					else
+						warn("Equipped iFrame was not found in iframeList: " .. equippedIframe)
+					end
+				end
+			end
+		end
+	end
+end
+
+for i, btn in pairs(holder:GetChildren()) do
+	if btn:IsA("GuiButton") then
+		btn.Activated:Connect(function()
+			openGUI(btn.Name)
+		end)
+	end
+end
