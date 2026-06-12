@@ -1,0 +1,124 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local iframeList = require(modules:WaitForChild("iFrameList"))
+
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+local plr = Players.LocalPlayer
+
+local mainHolder = script.Parent
+local tempLabel = script:WaitForChild("Temp")
+local invHolder = mainHolder:WaitForChild("Holder"):WaitForChild("ScrollingFrame")
+local equipBtn = mainHolder:WaitForChild("Options"):WaitForChild("EquipBtn")
+local deleteBtn = mainHolder:WaitForChild("Options"):WaitForChild("DeleteBtn")
+local showcaseriFrame = ""
+local equipiFrameRemote = remotes:WaitForChild("Rolling"):WaitForChild("EquipiFrame")
+local deleteiFrameRemote = remotes:WaitForChild("Rolling"):WaitForChild("DeleteiFrame")
+local activateiFrame = remotes:WaitForChild("Rolling"):WaitForChild("ActivateiFrame")
+
+
+remotes:WaitForChild("SwitchedUI").Event:Connect(function(uiName:string)
+	if uiName == "_Inventory" then
+		for i, v in pairs(invHolder:GetChildren()) do
+			if v:IsA("GuiButton") then
+				v:Destroy()
+			end
+		end
+		
+		local currentInventorySpace = 0
+		for i, iframe in pairs(plr.Inventory.OwnediFrames:GetChildren()) do
+			currentInventorySpace += iframe.Value
+		end
+		local maxInventorySpace = plr.Inventory.MaxInventory.Value
+		local formattedText = currentInventorySpace.."/"..maxInventorySpace
+		mainHolder.TopBar.Space.Title.Text = formattedText
+		
+		for i,v in pairs(plr.Inventory.OwnediFrames:GetChildren()) do
+			local iframeTable = nil
+			for j, a in pairs(iframeList) do
+				if a[1] == tostring(v) then
+					iframeTable = a
+				end
+			end
+			
+			for j = v.Value, 1, -1 do
+				local newTemp = tempLabel:Clone()
+				newTemp.Parent = invHolder
+				newTemp.Name = iframeTable[1]
+
+				newTemp.iFrameName.Text = iframeTable[1]
+				newTemp.iFrameName.TextColor3 = iframeTable[3]
+				newTemp.LayoutOrder = string.format("-%d", iframeTable[2])
+			end
+		end
+	end
+end)
+
+invHolder.ChildAdded:Connect(function(btn)
+	if btn:IsA("GuiButton") then
+		btn.Active = true
+		btn.Activated:Connect(function()
+			mainHolder.Selection.Visible = false
+			mainHolder.Showcaser.Visible = true
+			mainHolder.Options.Visible = true
+			
+			local iframeInfo = {}
+			for i, iframeTable in ipairs(iframeList) do
+				if iframeTable[1] == btn.Name then 
+					iframeInfo = iframeTable
+				end
+			end
+			
+			local showcaser = mainHolder:WaitForChild("Showcaser")
+			local options = mainHolder:WaitForChild("Options")
+			
+			showcaseriFrame = iframeInfo[1]
+			showcaser.iFrameName.Text = iframeInfo[1]
+			showcaser.iFrameName.TextColor3 = iframeInfo[3]
+			showcaser.iFrameRarity.Text = string.format("1 in %d", iframeInfo[2])
+		end)
+	end
+end)
+
+mainHolder.SearchBar.FocusLost:Connect(function()
+	local searchText = mainHolder.SearchBar.Text:lower()
+	
+	for i, iframe in pairs(invHolder:GetChildren()) do
+		if iframe:IsA("GuiButton") then
+			if iframe.Name:lower():find(searchText) then
+				iframe.Visible = true
+			else
+				iframe.Visible = false
+			end
+			
+			if searchText == "" then
+				iframe.Visible = true
+			end
+		end
+	end
+end)
+
+equipBtn.Activated:Connect(function()
+	equipiFrameRemote:FireServer(showcaseriFrame)
+	activateiFrame:FireServer(showcaseriFrame)
+end)
+
+deleteBtn.Activated:Connect(function()
+	if showcaseriFrame == "" then return end
+
+	deleteiFrameRemote:FireServer(showcaseriFrame)
+
+	for i, iframeBtn in pairs(invHolder:GetChildren()) do
+		if iframeBtn:IsA("GuiButton") and iframeBtn.Name == showcaseriFrame then
+			iframeBtn:Destroy()
+			break
+		end
+	end
+
+	mainHolder.Selection.Visible = true
+	mainHolder.Showcaser.Visible = false
+	mainHolder.Options.Visible = false
+	showcaseriFrame = ""
+end)
